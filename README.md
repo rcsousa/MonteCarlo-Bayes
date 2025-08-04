@@ -443,9 +443,8 @@ Este projeto está licenciado sob **MIT License** - veja [LICENSE](LICENSE) para
 
 ### **Autor**
 **Ricardo Sousa**
-- 📧 Email: [rcsousa@example.com](mailto:rcsousa@example.com)
-- 💼 LinkedIn: [@ricardocsousa](https://linkedin.com/in/ricardocsousa)
-- 🐦 Twitter: [@rcsousa_tech](https://twitter.com/rcsousa_tech)
+- 📧 Email: [ricardo.c.sousa@gmail.com](mailto:ricardo.c.sousa@gmail.com)
+- 💼 LinkedIn: [@rcsousa1](https://linkedin.com/in/rcsousa1)
 
 ### **Suporte**
 - 🐛 **Bugs**: Abra uma [Issue](https://github.com/rcsousa/MonteCarlo-Bayes/issues)
