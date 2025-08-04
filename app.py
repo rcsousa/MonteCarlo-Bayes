@@ -1,5 +1,5 @@
 import streamlit as st
-from simulation import run_simulation
+from simulation import run_simulation_with_temporal_learning
 from parameters import parameters, states
 from inference import update_prior
 from utils import show_parameter_note, show_state_note
@@ -65,6 +65,13 @@ st.sidebar.header("🎛️ Controles")
 n_gerentes = st.sidebar.slider("Número de gerentes", 1000, 50000, 27000, step=1000)
 n_meses = st.sidebar.slider("Horizonte (meses)", 6, 60, 36)
 
+# Nova opção para habilitar/desabilitar aprendizado temporal
+learning_enabled = st.sidebar.checkbox(
+    "🧠 Aprendizado Temporal Bayesiano", 
+    value=True,
+    help="Se habilitado, os posteriores de cada mês se tornam priors do próximo mês"
+)
+
 custom_matrix = build_transition_matrix()
 
 st.markdown("---")
@@ -80,8 +87,13 @@ for state in states:
 
 st.markdown("---")
 
-st.subheader("📈 Simulação com Cadeia de Markov")
-result = run_simulation(n_gerentes=n_gerentes, n_months=n_meses, transition_matrix=custom_matrix)
+st.subheader("📈 Simulação com Cadeia de Markov + Aprendizado Temporal")
+result = run_simulation_with_temporal_learning(
+    n_gerentes=n_gerentes, 
+    n_months=n_meses, 
+    transition_matrix=custom_matrix, 
+    learning_enabled=learning_enabled
+)
 
 chart = alt.Chart(result["df_monthly"]).mark_line(point=True).encode(
     x="Mês:Q", y="Contas por Gerente (média):Q"
@@ -90,6 +102,79 @@ st.altair_chart(chart, use_container_width=True)
 
 st.metric("Capacidade média final por gerente", f"{result['final_mean_accounts']:.0f} contas")
 st.metric("Capacidade total estimada", f"{result['total_capacity']:.0f} contas")
+
+# Nova seção: Evolução dos Parâmetros Bayesianos (só se aprendizado habilitado)
+if result.get("learning_enabled", False):
+    st.markdown("---")
+    st.subheader("🧠 Evolução dos Parâmetros Bayesianos com Aprendizado Temporal")
+    
+    if "params_evolution" in result and result["params_evolution"]:
+        # Criar DataFrame da evolução dos parâmetros
+        evolution_data = []
+        for month, params in enumerate(result["params_evolution"]):
+            for param_name, param_data in params.items():
+                evolution_data.append({
+                    "Mês": month,
+                    "Parâmetro": param_name,
+                    "Valor Médio": param_data["mean"],
+                    "Alpha": param_data["alpha"],
+                    "Beta": param_data["beta"],
+                    "Valor Amostrado": param_data["sampled_value"]
+                })
+        
+        df_evolution = pd.DataFrame(evolution_data)
+        
+        # Gráfico da evolução da média dos parâmetros
+        evolution_chart = alt.Chart(df_evolution).mark_line(point=True).encode(
+            x="Mês:Q",
+            y="Valor Médio:Q",
+            color="Parâmetro:N",
+            tooltip=["Mês:Q", "Parâmetro:N", "Valor Médio:Q", "Alpha:Q", "Beta:Q"]
+        ).properties(
+            width=800, 
+            height=300,
+            title="Evolução da Média dos Parâmetros Bayesianos ao Longo do Tempo"
+        )
+        
+        st.altair_chart(evolution_chart, use_container_width=True)
+        
+        # Métricas finais dos parâmetros
+        final_params = result["params_evolution"][-1]
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            ai_inv = final_params["AI_Investment"]
+            st.metric(
+                "AI Investment (Final)", 
+                f"{ai_inv['mean']:.1%}",
+                f"Beta({ai_inv['alpha']:.0f}, {ai_inv['beta']:.0f})"
+            )
+        
+        with col2:
+            change_adp = final_params["Change_Adoption"]
+            st.metric(
+                "Change Adoption (Final)", 
+                f"{change_adp['mean']:.1%}",
+                f"Beta({change_adp['alpha']:.0f}, {change_adp['beta']:.0f})"
+            )
+        
+        with col3:
+            train_qual = final_params["Training_Quality"]
+            st.metric(
+                "Training Quality (Final)", 
+                f"{train_qual['mean']:.1%}",
+                f"Beta({train_qual['alpha']:.0f}, {train_qual['beta']:.0f})"
+            )
+        
+        # Log de evidências observadas
+        if result.get("evidences_log"):
+            with st.expander("📋 Log de Evidências Observadas (Últimos 5 meses)"):
+                recent_evidences = result["evidences_log"][-5:]
+                for i, evidence in enumerate(recent_evidences):
+                    st.markdown(f"**Mês {len(result['evidences_log']) - len(recent_evidences) + i + 1}:**")
+                    for param, obs in evidence.items():
+                        success_rate = obs["successes"] / obs["trials"]
+                        st.text(f"  {param}: {obs['successes']}/{obs['trials']} sucessos ({success_rate:.1%})")
 
 df_estados = pd.DataFrame({
     "Estado": [s["nome"] for s in states],
