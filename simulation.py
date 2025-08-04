@@ -181,3 +181,137 @@ def run_simulation(n_gerentes=27000, n_months=36, transition_matrix=None):
         transition_matrix=transition_matrix, 
         learning_enabled=True
     )
+
+def run_monte_carlo_analysis(n_gerentes=27000, n_months=36, transition_matrix=None, learning_enabled=True, n_simulations=1000):
+    """
+    Executa múltiplas simulações Monte Carlo para análise de incerteza.
+    Calcula intervalos de confiança e probabilidades de cenários.
+    
+    Args:
+        n_gerentes: Número de gerentes
+        n_months: Horizonte temporal
+        transition_matrix: Matriz de transição
+        learning_enabled: Aprendizado temporal ativo
+        n_simulations: Número de simulações Monte Carlo
+    
+    Returns:
+        dict: Análise probabilística completa
+    """
+    all_results = []
+    final_capacities = []
+    monthly_trajectories = []
+    
+    # Executa múltiplas simulações
+    for sim in range(n_simulations):
+        result = run_simulation_with_temporal_learning(
+            n_gerentes=n_gerentes,
+            n_months=n_months,
+            transition_matrix=transition_matrix,
+            learning_enabled=learning_enabled
+        )
+        
+        all_results.append(result)
+        final_capacities.append(result["final_mean_accounts"])
+        monthly_trajectories.append(result["df_monthly"]["Contas por Gerente (média)"].values)
+    
+    # Análise estatística
+    monthly_trajectories = np.array(monthly_trajectories)
+    
+    # Calcula percentis para cada mês
+    percentiles = [5, 25, 50, 75, 95]
+    monthly_percentiles = {}
+    
+    for p in percentiles:
+        monthly_percentiles[f"p{p}"] = np.percentile(monthly_trajectories, p, axis=0)
+    
+    # Análise da capacidade final
+    final_capacities = np.array(final_capacities)
+    final_stats = {
+        "mean": np.mean(final_capacities),
+        "std": np.std(final_capacities),
+        "min": np.min(final_capacities),
+        "max": np.max(final_capacities),
+        "p5": np.percentile(final_capacities, 5),
+        "p25": np.percentile(final_capacities, 25),
+        "p50": np.percentile(final_capacities, 50),
+        "p75": np.percentile(final_capacities, 75),
+        "p95": np.percentile(final_capacities, 95)
+    }
+    
+    return {
+        "monthly_percentiles": monthly_percentiles,
+        "final_stats": final_stats,
+        "all_trajectories": monthly_trajectories,
+        "final_capacities": final_capacities,
+        "n_simulations": n_simulations
+    }
+
+def calculate_scenario_probabilities(monte_carlo_results, target_scenarios):
+    """
+    Calcula probabilidades de cenários específicos se concretizarem.
+    
+    Args:
+        monte_carlo_results: Resultados da análise Monte Carlo
+        target_scenarios: Lista de cenários alvo (ex: [2200, 2500, 3000])
+    
+    Returns:
+        dict: Probabilidades de cada cenário
+    """
+    final_capacities = monte_carlo_results["final_capacities"]
+    probabilities = {}
+    
+    for target in target_scenarios:
+        # Probabilidade de exceder o target
+        prob_exceed = np.mean(final_capacities >= target)
+        
+        # Probabilidade de ficar dentro de ±5% do target
+        margin = target * 0.05
+        prob_within_5pct = np.mean(
+            (final_capacities >= target - margin) & 
+            (final_capacities <= target + margin)
+        )
+        
+        probabilities[f"P(>= {target})"] = prob_exceed
+        probabilities[f"P(±5% de {target})"] = prob_within_5pct
+    
+    return probabilities
+
+def analyze_risk_metrics(monte_carlo_results, baseline=2000):
+    """
+    Calcula métricas de risco para as projeções.
+    
+    Args:
+        monte_carlo_results: Resultados Monte Carlo
+        baseline: Capacidade baseline (sem IA)
+    
+    Returns:
+        dict: Métricas de risco e incerteza
+    """
+    final_capacities = monte_carlo_results["final_capacities"]
+    
+    # Value at Risk (VaR) - Pior cenário em 95% dos casos
+    var_95 = np.percentile(final_capacities, 5)
+    var_90 = np.percentile(final_capacities, 10)
+    
+    # Expected Shortfall - Média dos 5% piores casos
+    worst_5_pct = final_capacities[final_capacities <= var_95]
+    expected_shortfall = np.mean(worst_5_pct) if len(worst_5_pct) > 0 else var_95
+    
+    # Probabilidade de não ter ganho
+    prob_no_gain = np.mean(final_capacities <= baseline)
+    
+    # Coeficiente de variação
+    mean_capacity = np.mean(final_capacities)
+    std_capacity = np.std(final_capacities)
+    cv = std_capacity / mean_capacity
+    
+    return {
+        "var_95": var_95,
+        "var_90": var_90,
+        "expected_shortfall": expected_shortfall,
+        "prob_no_gain": prob_no_gain,
+        "coefficient_variation": cv,
+        "mean": mean_capacity,
+        "std": std_capacity,
+        "baseline": baseline
+    }
