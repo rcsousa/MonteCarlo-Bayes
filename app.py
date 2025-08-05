@@ -1717,10 +1717,10 @@ with tab5:
             st.write(f"Interpretação: {path_results['r2_interpretation']}")
 
         with col2:
-            # Calcula o potencial de ROI em account load (%)
+            # Calcula o potencial de ROI em account load (%) diretamente do modelo, sem limitação
             roi_potencial = path_results.get('total_effect_tech', 0) + path_results.get('total_effect_leadership', 0)
-            roi_potencial_pct = roi_potencial * 100
-            st.metric("Potencial de ROI em Account Load (%)", f"{roi_potencial_pct:.1f}%", help="Potencial máximo de aumento na capacidade por efeito combinado do modelo causal")
+            roi_potencial_pct = roi_potencial * 100  # valor calculado, sem limite
+            st.metric("Potencial de ROI em Account Load (%)", f"{roi_potencial_pct:.1f}%", help="Potencial máximo de aumento na capacidade por efeito combinado do modelo causal (valor calculado)")
             st.write(f"Tech Priority: {recommendations['tech_priority']}")
             st.write(f"Leadership Priority: {recommendations['leadership_priority']}")
             st.write(f"Tech Timeline: {recommendations['tech_timeline']}")
@@ -1748,14 +1748,47 @@ with tab5:
         dot.node('Net', 'Network Position')
         dot.node('Reg', 'Regime (Aggressive)')
         dot.node('Cap', 'Final Capacity')
+        # Adiciona nós para velocidade de execução e matriz de transição se existirem
+        if 'execution_speed_indirect' in mediation_results or 'execution_speed_direct' in mediation_results:
+            dot.node('Exec', 'Velocidade de Execução')
+        if 'transition_matrix_indirect' in mediation_results or 'transition_matrix_direct' in mediation_results:
+            dot.node('Matrix', 'Matriz de Transição')
 
         # Ligações e coeficientes
+        # Efeitos diretos
         dot.edge('Tech', 'Cap', label=f"{path_results.get('coef_tech',0):.2f}")
         dot.edge('Lead', 'Cap', label=f"{path_results.get('coef_leadership',0):.2f}")
         dot.edge('Res', 'Cap', label=f"{path_results.get('coef_resources',0):.2f}")
         dot.edge('Risk', 'Cap', label=f"{path_results.get('coef_risk',0):.2f}")
         dot.edge('Net', 'Cap', label=f"{path_results.get('coef_network',0):.2f}")
         dot.edge('Reg', 'Cap', label=f"{path_results.get('coef_regime',0):.2f}")
+
+        # Efeitos de mediação (Tech → Leadership → Cap)
+        # Velocidade de Execução
+        if 'execution_speed_indirect' in mediation_results:
+            dot.edge('Exec', 'Lead', label=f"Med: {mediation_results.get('execution_speed_indirect',0):.2f}")
+        if 'execution_speed_direct' in mediation_results:
+            dot.edge('Exec', 'Cap', label=f"Dir: {mediation_results.get('execution_speed_direct',0):.2f}")
+        # Matriz de Transição
+        if 'transition_matrix_indirect' in mediation_results:
+            dot.edge('Matrix', 'Lead', label=f"Med: {mediation_results.get('transition_matrix_indirect',0):.2f}")
+        if 'transition_matrix_direct' in mediation_results:
+            dot.edge('Matrix', 'Cap', label=f"Dir: {mediation_results.get('transition_matrix_direct',0):.2f}")
+        # Adiciona setas de mediação para todas as variáveis relevantes
+        # Tech → Lead
+        dot.edge('Tech', 'Lead', label=f"Med: {mediation_results.get('tech_indirect',0):.2f}")
+        # Resource → Lead (se existir)
+        if 'resources_indirect' in mediation_results:
+            dot.edge('Res', 'Lead', label=f"Med: {mediation_results.get('resources_indirect',0):.2f}")
+        # Risk → Lead (se existir)
+        if 'risk_indirect' in mediation_results:
+            dot.edge('Risk', 'Lead', label=f"Med: {mediation_results.get('risk_indirect',0):.2f}")
+        # Network → Lead (se existir)
+        if 'network_indirect' in mediation_results:
+            dot.edge('Net', 'Lead', label=f"Med: {mediation_results.get('network_indirect',0):.2f}")
+        # Regime → Lead (se existir)
+        if 'regime_indirect' in mediation_results:
+            dot.edge('Reg', 'Lead', label=f"Med: {mediation_results.get('regime_indirect',0):.2f}")
 
         # Exibe o diagrama
         st.graphviz_chart(dot)
