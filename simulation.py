@@ -630,7 +630,20 @@ def run_monte_carlo_analysis(n_gerentes=27000, n_months=36, transition_matrix=No
         
         # ===== REGIME SAMPLING =====
         # Mercado pode estar em qualquer regime (instabilidade estrutural)
-        current_regime = np.random.choice([0, 1, 2], p=[0.25, 0.50, 0.25])
+        # NOVO: Usa proporções configuradas pelo usuário se disponíveis
+        try:
+            import streamlit as st
+            regime_conservative = st.session_state.get('regime_conservative', 25)
+            regime_normal = st.session_state.get('regime_normal', 50)
+            regime_aggressive = st.session_state.get('regime_aggressive', 25)
+            total_regime = regime_conservative + regime_normal + regime_aggressive
+            if total_regime == 0:
+                regime_probs = [0.25, 0.50, 0.25]
+            else:
+                regime_probs = [regime_conservative/total_regime, regime_normal/total_regime, regime_aggressive/total_regime]
+        except Exception:
+            regime_probs = [0.25, 0.50, 0.25]
+        current_regime = np.random.choice([0, 1, 2], p=regime_probs)
         
         # ===== ORGANIZATIONAL DNA SAMPLING =====
         # Cada organização tem perfil comportamental único
@@ -760,7 +773,18 @@ def run_monte_carlo_analysis(n_gerentes=27000, n_months=36, transition_matrix=No
             "tail_ratio": final_stats["tail_ratio"],
             "extreme_range": final_stats["max"] - final_stats["min"],
             "tail_thickness": (final_stats["p99"] - final_stats["p1"]) / (final_stats["p75"] - final_stats["p25"])
-        }
+        },
+        # DADOS CAUSAIS PARA INFERÊNCIA
+        "organizational_profiles": org_dna_log,
+        "regimes": regime_trajectories,
+        "causal_data": [
+            {
+                **org_dna_log[i],
+                'regime': regime_trajectories[i] if i < len(regime_trajectories) else 0,
+                'final_capacity': final_capacities[i]
+            }
+            for i in range(min(len(org_dna_log), len(final_capacities)))
+        ]
     }
 
 def calculate_scenario_probabilities(monte_carlo_results, target_scenarios):
